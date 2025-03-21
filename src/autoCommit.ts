@@ -2,7 +2,7 @@ import { exec } from 'child_process';
 import chokidar from 'chokidar';
 import OpenAI from 'openai';
 
-const MAX_CHANGES = 10;
+const MAX_CHANGES = 1; // Para facilitar o teste, vamos reduzir para 1
 let changeCount = 0;
 let changedFiles: string[] = [];
 
@@ -13,13 +13,13 @@ const openai = new OpenAI({
 const generateCommitMessage = async (files: string[]): Promise<string> => {
   const prompt = `Generate a commit message for the following changes:\n${files.join('\n')}`;
   try {
-    const response = await openai.completions.create({
-      model: 'text-davinci-003',
-      prompt,
+    const response = await openai.chat.completions.create({
+      model: 'gpt-3.5-turbo',
+      messages: [{ role: 'user', content: prompt }],
       max_tokens: 50,
     });
-    console.log('Generated commit message:', response.choices[0].text.trim());
-    return response.choices[0].text.trim();
+    const commitMessage = response.choices[0]?.message?.content?.trim() || 'Auto commit';
+    return commitMessage;
   } catch (error) {
     if (error instanceof Error) {
       console.error(`Error generating commit message: ${error.message}`);
@@ -32,8 +32,7 @@ const generateCommitMessage = async (files: string[]): Promise<string> => {
 
 const commitChanges = async () => {
   const commitMessage = await generateCommitMessage(changedFiles);
-  console.log('Committing changes with message:', commitMessage);
-  exec(`git add . && git commit -m "${commitMessage}"`, (error, stdout, stderr) => {
+  exec(`git add . && git commit -m '${commitMessage}'`, (error, stdout, stderr) => {
     if (error) {
       console.error(`Error committing changes: ${error.message}`);
       return;
@@ -42,7 +41,6 @@ const commitChanges = async () => {
       console.error(`Commit stderr: ${stderr}`);
       return;
     }
-    console.log(`Commit stdout: ${stdout}`);
     changeCount = 0; // Reset change count after commit
     changedFiles = []; // Reset changed files after commit
   });
@@ -55,7 +53,6 @@ export const startWatching = () => {
   });
 
   watcher.on('change', (path) => {
-    console.log(`File ${path} has been changed`);
     changeCount += 1;
     changedFiles.push(path);
 
@@ -63,6 +60,4 @@ export const startWatching = () => {
       commitChanges();
     }
   });
-
-  console.log('Watching for file changes...');
 };
